@@ -1,15 +1,16 @@
-# Contribution [#]: [Issue Title]
+# Contribution 1: Improve layout of verification modal
 
-**Contribution Number:** [1 / 2 / 3]  
-**Student:** [Your Name]  
-**Issue:** [GitHub issue link]  
-**Status:** [Phase I / Phase II / Phase III / Phase IV] [In Progress / Complete]
+**Contribution Number:** 1
+**Student:** Jennifer Martinez Mejia  
+**Issue:** https://github.com/project-robius/robrix/issues/846  
+**Status:** Phase I Complete
 
 ---
 
 ## Why I Chose This Issue
 
-[1-2 paragraphs explaining why this issue interests you, how it matches your skills/learning goals, what you hope to learn]
+I chose this issue because it is a practical way to improve the user interface. It requires making emojis larger, fixing button alignments, and making the verification messages clearer. This lets me work directly with user feedback to build a better layout.
+Working on this will also give me hands-on experience with Rust. Makepad uses its own UI language within Rust, so this is a good opportunity to learn how to use its right-wrap flow layouts. I want to improve my skills in cross-platform layout management and write cleaner UI code.
 
 ---
 
