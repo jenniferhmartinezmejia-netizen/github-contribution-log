@@ -3,7 +3,7 @@
 **Contribution Number:** 1  
 **Student:** Jennifer Martinez Mejia  
 **Issue:** https://github.com/project-robius/robrix/issues/846  
-**Status:** Phase II Complete
+**Status:** Phase III Complete
 
 ---
 
@@ -127,36 +127,32 @@ This is a UI/layout change, and the project has no widget/UI test harness (the o
 
 ### Unit Tests
 
-- [ ] Test case 1: [Description]
-- [ ] Test case 2: [Description]
-- [ ] Test case 3: [Description]
+- None added — not applicable. The change is declarative UI layout (script_mod! widgets) plus a populate_emoji_cell helper that only sets text/visibility on live widgets. It has no pure logic to assert on, and Robrix has no widget/UI unit-test harness (the only #[test] code in the repo is in src/utils.rs; exercising widgets requires a running makepad Cx). There's nothing meaningful to unit-test in isolation here.
 
 ### Integration Tests
 
-- [ ] Integration scenario 1
-- [ ] Integration scenario 2
+- None added — not applicable. The SAS emoji modal can only be driven by a real incoming verification request from a second Matrix device, and the project has no harness to mock that flow. Verifying it requires the live end-to-end path, which is covered under manual testing below.
 
 ### Manual Testing
 
-[What you tested manually and results]
+- Static checks: cargo clippy --workspace --all-features — clean, zero warnings/errors (matches the CI gate in .github/workflows/main.yml).
+- Runtime DSL validation: Ran the app (cargo run) and inspected the makepad startup log. Clippy passing was not sufficient — the script_mod! UI is evaluated at runtime, and the first run surfaced two script errors (VerificationEmojiCell not found in scope and a Fit{max:} type mismatch). After fixing both, a rebuild + rerun confirmed zero verification_modal.rs errors in the startup log.
+- End-to-end visual: Triggered a real SAS emoji verification from a second client and confirmed the 7 emojis now render as large, wrapping cells with their descriptions — the intended fix.
+- Other states (by inspection): The decimal/number fallback is byte-for-byte unchanged, and the grid + question prompt are hidden at the top of every action and on init, so they don't leak into the error/waiting/completed/cancelled screens. (These paths were reasoned about and code-reviewed, not each individually exercised at runtime.)
 
 ---
 
 ## Implementation Notes
 
-### Week [X] Progress
+### Week 1 Progress
 
-[What you built this week, challenges faced, decisions made]
-
-### Week [Y] Progress
-
-[Continue documenting as you work]
+Built the larger-emoji layout for the verification modal: a VerificationEmojiCell widget (large glyph + description) laid out in a Flow.Right{wrap: true} grid, replacing the old one-per-line text list. Reworked the KeysExchanged handler to populate/show the grid and added state-hygiene logic to hide it elsewhere.
 
 ### Code Changes
 
-- **Files modified:** [List]
-- **Key commits:** [Links to important commits]
-- **Approach decisions:** [Why you chose certain approaches]
+- **Files modified:** src/verification_modal.rs
+- **Key commits:** 0240896f — Improve verification modal layout with larger, wrapping emoji cells (https://github.com/jenniferhmartinezmejia-netizen/robrix/commit/4e253deb7a4cea0ca28a17f88f60af3a7a808427).
+- **Approach decisions:** Fixed 7 declared cells rather than dynamic instantiation — SAS V1 always yields exactly 7 emojis, so this matches the invariant, fits the codebase's declarative DSL style, and avoids runtime widget-creation complexity. populate_emoji_cell still defensively hides any cell without a corresponding emoji. Reused the existing wrapping pattern (Flow.Right{wrap: true}) from ModalButtonsRow rather than inventing a new layout primitive. Separate question label below the grid — necessary because one text label can't span both above and below the emoji grid. Kept it left-aligned to match body.
 
 ---
 
