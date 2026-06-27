@@ -3,7 +3,7 @@
 **Contribution Number:** 1  
 **Student:** Jennifer Martinez Mejia  
 **Issue:** https://github.com/project-robius/robrix/issues/846  
-**Status:** Phase III Complete
+**Status:** Phase IV In Progress
 
 ---
 
@@ -19,21 +19,21 @@ Working on this will also give me hands-on experience with Rust. Makepad uses it
 
 ### Problem Description
 
-The emoji (SAS) verification modal functions correctly, but its presentation is poor: the 7 verification emojis are rendered too small and as a plain, one-per-line text list rather than a deliberate layout. Users have specifically asked for the emojis to be larger, and since Makepad now supports well-aligned right-wrapping flow layouts, the emojis can be laid out as a clean wrapping grid of cells — closer to how Element presents them.
+The SAS verification modal works correctly but the 7 emojis render too small — they're concatenated into a single body label at 11.5pt, making them hard to compare against another device.
 
 ### Expected Behavior
 
-When keys are exchanged, the modal should display the 7 emojis prominently: each emoji shown at a large, easily readable size with its short description, arranged in a right-wrapping flow (e.g. two rows of ~4 + 3) that stays within the modal width. The result should be visually comparable to Element's emoji-verification screen, while the surrounding text ("Please verify the following emoji:" / "Do these emoji keys match?") and the Yes/No buttons remain unchanged.
+7 emojis displayed large, each with its description beneath, in a right-wrapping grid — comparable to Element's presentation.
 
 ### Current Behavior
 
-The emojis appear at the same ~11.5pt size as ordinary body text, stacked one per line as emoji  (description), because they're concatenated into a single string and shown in the shared body label. They are small, plain, and not laid out as distinct items — there's no way to size or arrange them independently of the paragraph text.
+Emojis appear at body-text size (~11.5pt), one per line as emoji (description), with no independent sizing or layout.
 
 ### Affected Components
 
-- src/verification_modal.rs — the VerificationModal widget: its script_mod! layout (title / body label / buttons row) and the KeysExchanged arm of handle_event that builds the emoji string (lines 192–218).
-- src/shared/helpers.rs — shared modal styles: SmallModal, ModalTitle, ModalBody (the label that renders the emoji text, fixed at font_size: 11.5, lines 79–86), and ModalButtonsRow (the existing Flow.Right{wrap:true} pattern to model the fix on, lines 88–96).
-- src/verification.rs — supplies the emoji data (EmojiShortAuthString, 7 Emojis each with .symbol/.description, lines 285–286); not expected to change — the issue is purely presentational.
+- src/verification_modal.rs — modal layout and KeysExchanged handler
+- src/shared/helpers.rs — ModalBody (font size) and ModalButtonsRow (wrapping pattern to model the fix on)
+- src/verification.rs — supplies emoji data; not modified
 
 ---
 
@@ -41,22 +41,17 @@ The emojis appear at the same ~11.5pt size as ordinary body text, stacked one pe
 
 ### Environment Setup
 
-Platform: macOS (Darwin), building the desktop target.
+macOS, cargo run --release. Requires brew install cmake.
 
-Toolchain: Rust (stable) + cmake (brew install cmake), required by the Matrix SDK's native dependencies (aws-lc-sys). Build with cargo run --release.
-
-Challenge — the modal can't be self-triggered: Robrix can only respond to verification requests; it cannot initiate one (see src/verification.rs, which only registers handlers for incoming ToDeviceKeyVerificationRequest / in-room VerificationRequest events). There is no debug/mock path in the code.
-
-Resolution: reproduce with two sessions of the same Matrix account — Robrix as one device, a second client (Element web, no install needed) as the other — and start the emoji verification from the second client. (For iterating on the layout later, a throwaway debug trigger that feeds the modal a fake 7-emoji list is far faster than repeating a real verification each time.)
+The modal can't be self-triggered — Robrix only receives verification requests, it can't initiate them. Reproduction requires two sessions of the same Matrix account: Robrix as one device, Element web as the other.
 
 ### Steps to Reproduce
 
-1. Create a Matrix account at https://app.element.io (homeserver matrix.org). This browser tab is device #2.
-2. Build & run Robrix: brew install cmake then cargo run --release.
-3. Log into Robrix with the same account. Robrix is now device #1.
-4. In Element: Settings → Sessions, select the Robrix session, click Verify session.
-5. Choose "Verify with emoji" (interactive/SAS) — not the security-key method.
-6. Robrix opens the "Verification Request" modal showing 7 emojis and "Do these emoji keys match?". Observe that the emojis render at the same small ~11.5pt body-text size as the surrounding paragraph — this is the layout to improve.
+1. Create a Matrix account at https://app.element.io (homeserver matrix.org).
+2. Run Robrix: cargo run --release and log in with the same account.
+3. In Element: Settings → Sessions, select the Robrix session, click Verify session.
+4. Choose Verify with emoji.
+5. The modal appears in Robrix with 7 small emojis — the layout to improve.
 
 ### Reproduction Evidence
 
@@ -69,13 +64,11 @@ Resolution: reproduce with two sessions of the same Matrix account — Robrix as
 
 ### Analysis
 
-The root cause is in the VerificationAction::KeysExchanged handler in src/verification_modal.rs:192-203: the emoji set is flattened into one string — each emoji formatted as "{symbol}  ({description})" and joined with "\n   " — then assigned to the single shared body label. That label is the ModalBody style in src/shared/helpers.rs:79-86, which hard-codes text_style: REGULAR_TEXT {font_size: 11.5}.
-
-Because the emojis live inside ordinary body text, they inherit body-text size and a newline-driven layout. There is no per-emoji widget and no dedicated emoji container, so nothing can size the emoji glyphs larger or arrange them in a wrapping grid independently of the surrounding paragraph. The fix therefore isn't a tweak to the verification logic (which is correct) but a layout change: introduce dedicated, larger-font emoji cell widgets inside a Flow.Right{wrap:true} container — reusing the pattern already established by ModalButtonsRow.
+In src/verification_modal.rs:192-203, all 7 emojis are joined into one string and set on the shared body label, which is fixed at font_size: 11.5. There's no per-emoji widget, so nothing can size or arrange them independently.
 
 ### Proposed Solution
 
-Stop rendering the emojis as one text blob. Instead, in the modal's script_mod! layout, add a dedicated wrapping emoji container holding 7 reusable "emoji cell" widgets (each a small Down view = one large-font emoji label above one small description label). In the KeysExchanged handler, populate and show those cells instead of concatenating emoji text into body.
+Add a VerificationEmojiCell widget (large emoji + small description) and a Flow.Right{wrap: true} container holding 7 cells. Populate them in the KeysExchanged handler instead of building a text string.
 
 ### Implementation Plan
 
@@ -158,15 +151,17 @@ Built the larger-emoji layout for the verification modal: a VerificationEmojiCel
 
 ## Pull Request
 
-**PR Link:** [GitHub PR URL when submitted]
+**PR Link:** https://github.com/project-robius/robrix/pull/950
 
-**PR Description:** [Draft or final PR description - much of the content above can be adapted]
+**PR Description:**
+
+Replaces the plain text list of SAS verification emojis in the verification modal with a right-wrapping grid of cells, each displaying a large emoji glyph above its description. Also updates the confirmation button labels to "They match" / "They don't match" and adds a note to the success message about secure messaging.
 
 **Maintainer Feedback:**
 - [Date]: [Summary of feedback received]
 - [Date]: [How you addressed it]
 
-**Status:** [Awaiting review / Iterating / Approved / Merged]
+**Status:** Awaiting review
 
 ---
 
