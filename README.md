@@ -32,8 +32,8 @@ Emojis appear at body-text size (~11.5pt), one per line as emoji (description), 
 ### Affected Components
 
 - src/verification_modal.rs — modal layout and KeysExchanged handler
-- src/shared/helpers.rs — ModalBody (font size) and ModalButtonsRow (wrapping pattern to model the fix on)
-- src/verification.rs — supplies emoji data; not modified
+- src/shared/helpers.rs — referenced (not modified) for the `ModalBody` font size and the `ModalButtonsRow` wrapping pattern the fix is modeled on.
+- src/verification.rs — referenced (not modified); supplies the emoji data.
 
 ---
 
@@ -41,9 +41,12 @@ Emojis appear at body-text size (~11.5pt), one per line as emoji (description), 
 
 ### Environment Setup
 
-macOS, cargo run --release. Requires brew install cmake.
+**Setup path used: README instructions + CI config inspection** (this project has no dev container).
 
-The modal can't be self-triggered — Robrix only receives verification requests, it can't initiate them. Reproduction requires two sessions of the same Matrix account: Robrix as one device, Element web as the other.
+1. Followed the README's *"Building & Running Robrix on Desktop"* section: installed Rust (stable, per `rust-toolchain.toml`) and `cmake` (`brew install cmake`, required by the Matrix SDK's native dependencies), then built with `cargo run --release` on macOS.
+2. Inspected the CI config (`.github/workflows/main.yml`) to identify the checks the project enforces: `cargo clippy --workspace --all-features` with warnings-as-errors, plus a `typos` spell-check.
+
+The modal can't be self-triggered — Robrix only *receives* verification requests. Reproduction requires two sessions of the same Matrix account: Robrix as one device, Element web as the other.
 
 ### Steps to Reproduce
 
@@ -56,7 +59,7 @@ The modal can't be self-triggered — Robrix only receives verification requests
 ### Reproduction Evidence
 
 - **Commit showing reproduction:** https://github.com/jenniferhmartinezmejia-netizen/robrix/tree/fix-issue-846
-- **My findings:** The issue is exactly as described.
+- **My findings:** The issue reproduces exactly as described.
 
 ---
 
@@ -120,18 +123,18 @@ This is a UI/layout change, and the project has no widget/UI test harness (the o
 
 ### Unit Tests
 
-- None added — not applicable. The change is declarative UI layout (script_mod! widgets) plus a populate_emoji_cell helper that only sets text/visibility on live widgets. It has no pure logic to assert on, and Robrix has no widget/UI unit-test harness (the only #[test] code in the repo is in src/utils.rs; exercising widgets requires a running makepad Cx). There's nothing meaningful to unit-test in isolation here.
+None — the change is declarative UI layout plus a helper that only sets text on live widgets. There's no pure logic to assert on, and Robrix has no widget test harness.
 
 ### Integration Tests
 
-- None added — not applicable. The SAS emoji modal can only be driven by a real incoming verification request from a second Matrix device, and the project has no harness to mock that flow. Verifying it requires the live end-to-end path, which is covered under manual testing below.
+None — the modal can only be driven by a live incoming verification from a second Matrix device; the project has no harness to mock that flow.
 
 ### Manual Testing
 
-- Static checks: cargo clippy --workspace --all-features — clean, zero warnings/errors (matches the CI gate in .github/workflows/main.yml).
-- Runtime DSL validation: Ran the app (cargo run) and inspected the makepad startup log. Clippy passing was not sufficient — the script_mod! UI is evaluated at runtime, and the first run surfaced two script errors (VerificationEmojiCell not found in scope and a Fit{max:} type mismatch). After fixing both, a rebuild + rerun confirmed zero verification_modal.rs errors in the startup log.
-- End-to-end visual: Triggered a real SAS emoji verification from a second client and confirmed the 7 emojis now render as large, wrapping cells with their descriptions — the intended fix.
-- Other states (by inspection): The decimal/number fallback is byte-for-byte unchanged, and the grid + question prompt are hidden at the top of every action and on init, so they don't leak into the error/waiting/completed/cancelled screens. (These paths were reasoned about and code-reviewed, not each individually exercised at runtime.)
+- `cargo clippy --workspace --all-features` — clean, zero warnings.
+- Ran the app and inspected the makepad startup log. Clippy alone wasn't enough: the `script_mod!` DSL is evaluated at runtime, and the first run surfaced two script errors (`VerificationEmojiCell not found in scope` and a `Fit{max:}` type mismatch). Fixed both; a rerun showed zero `verification_modal.rs` errors.
+- Triggered a real SAS verification: the 7 emojis now render as large wrapping cells.
+- Reviewed the other states: the grid stays hidden in the error/waiting/completed/cancelled/decimal states.
 
 ---
 
@@ -153,13 +156,13 @@ Built the larger-emoji layout for the verification modal: a VerificationEmojiCel
 
 **PR Link:** https://github.com/project-robius/robrix/pull/950
 
-**PR Description:**
-
-Replaces the plain text list of SAS verification emojis in the verification modal with a right-wrapping grid of cells, each displaying a large emoji glyph above its description. Also updates the confirmation button labels to "They match" / "They don't match" and adds a note to the success message about secure messaging.
+**PR Description:*
+*
+Replaces the plain text list of SAS verification emojis with a right-wrapping grid of larger cells, each showing an emoji glyph above its description. Scoped to the emoji layout only — no other modal behavior changes.
 
 **Maintainer Feedback:**
-- [Date]: [Summary of feedback received]
-- [Date]: [How you addressed it]
+- [06/29/2026] Feedback: don't copy Element's design decisions (button order, body messages, phrasing) — only the emoji *layout* needs to change. Also: use `iter()` instead of C-style indexed iteration, keep Robrix's confirm-right/cancel-left button order, and reuse the existing modal body instead of adding a separate label.
+- [07/05/2026] How I addressed it: reverted the button reorder, button label text, and the extra label; reused the existing `body`; switched to `iter().enumerate()`. Kept only the emoji grid layout.
 
 **Status:** Awaiting review
 
@@ -169,20 +172,23 @@ Replaces the plain text list of SAS verification emojis in the verification moda
 
 ### Technical Skills Gained
 
-[What you learned technically]
+- Makepad's `script_mod!` DSL — and that it's **runtime-evaluated**, so a passing `cargo clippy` doesn't prove the UI works; you have to run the app and read the startup log.
+- Widget scoping in Makepad: referencing sibling widgets by full `mod.widgets.` path, and scoping `ids!` lookups to a parent widget.
+- Cleaner Rust iteration (`iter().enumerate()` over manual indexing).
 
 ### Challenges Overcome
 
-[What was hard and how you solved it]
+The hardest part wasn't technical — it was scope. The issue referenced Element for comparison, so I assumed matching Element's design (button order, wording, an expanded success message) was wanted. The maintainer pushed back strongly, noting Robrix isn't an Element clone and that lifting text/design raises IP concerns. I had to revert everything except the emoji layout. The lesson: **don't infer what maintainers want from an issue's examples or from others' comments — confirm the scope first**, and keep changes tightly focused on what was actually requested. I also learned not to let strong feedback discourage me; it was direct, but acting on it made the contribution cleaner and correct.
 
 ### What I'd Do Differently Next Time
 
-[Reflection on your process]
+Ask a scoping question **before** implementing anything beyond the literal ask, and keep the diff minimal from the start. Confirming "should I only change X, or also Y?" early would have avoided the revert cycle entirely.
 
 ---
 
 ## Resources Used
-
-- [Link to helpful documentation]
-- [Tutorial or Stack Overflow post that helped]
-- [GitHub issues or discussions that helped]
+- Robrix `README.md` — desktop build/run instructions
+- Robrix `AGENTS.md` — Makepad `script_mod!` DSL conventions
+- `.github/workflows/main.yml` — the project's CI checks (clippy, typos)
+- Existing code as reference: `src/shared/helpers.rs` (`ModalButtonsRow`, `ModalBody`) and `src/shared/file_upload_modal.rs` (sibling-widget reference pattern)
+- Matrix SAS verification: https://spec.matrix.org/latest/client-server-api/#short-authentication-string-sas-verification
